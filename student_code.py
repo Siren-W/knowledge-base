@@ -3,6 +3,17 @@ from util import *
 from logical_classes import *
 
 verbose = 0
+def format_facts_list(facts_list):
+    formatted_facts = []
+    for fact in facts_list:
+        fact_type = fact.__class__.__name__  # Get the name of the class, e.g., "Fact"
+        statement = fact.statement.predicate  # Accessing the statement predicate
+        terms = [str(term.value) if hasattr(term, 'value') else str(term) for term in fact.statement.terms]  # Extracting terms and converting them to strings
+        # fact_str = f"{fact_type}('{statement}', [{', '.join(terms)}]){', supported by' + str(fact.supported_by) if fact.supported_by else ''}"
+        fact_str = f"{fact_type}('{statement}', [{', '.join(terms)}])"
+        formatted_facts.append(fact_str)
+
+    return "\n".join(formatted_facts)
 
 class KnowledgeBase(object):
     def __init__(self, facts=[], rules=[]):
@@ -125,9 +136,66 @@ class KnowledgeBase(object):
         Returns:
             None
         """
-        printv("Retracting {!r}", 0, verbose, [fact_rule])
         ####################################################
         # Student code goes here
+        def remove_if_no_support(fr):
+            if isinstance(fr, Fact):
+                if not fr.asserted and len(fr.supported_by) == 0:
+                    self.facts.remove(fr)
+                    remove_supports(fr)
+            elif isinstance(fr, Rule):
+                if not fr.asserted and len(fr.supported_by) == 0:
+                    self.rules.remove(fr)
+                    remove_supports(fr)
+
+        def remove_supports(fr):
+            new_facts = []
+            remove_list = []
+            for fact in self.facts[:]:
+                if fact in fr.supports_facts:
+                    if len(fact.supported_by) > 2 and fr in fact.supported_by:
+                        index = fact.supported_by.index(fr)
+
+                        # If `fr` is an instance of Rule, remove the element before it
+                        if isinstance(fr, Rule):
+                            if index > 0:  # To ensure we don't go out of bounds
+                                fact.supported_by.pop(index - 1)
+                        else:
+                            if index < len(fact.supported_by) - 1:  # Ensure we don't go out of bounds
+                                fact.supported_by.pop(index + 1)
+
+                        # Remove `fr` itself
+                        fact.supported_by.pop(index)
+                        new_facts.append(fact)
+
+                    else: remove_list.append(fact)
+
+                else: new_facts.append(fact)
+            self.facts = new_facts
+            for fact in remove_list:
+                remove_supports(fact)
+
+
+
+            for supported_rule in fr.supports_rules[:]:
+                self.rules = [rule for rule in self.rules if rule != supported_rule]
+                remove_supports(supported_rule)
+
+
+        # Start retraction process
+        if not isinstance(fact_rule, (Fact, Rule)) or fact_rule.supported_by:
+            return
+
+        if isinstance(fact_rule, Fact):
+            for fact in self.facts[:]:
+                if fact.asserted and fact == fact_rule:
+                    self.facts.remove(fact)
+                    remove_supports(fact)
+        elif isinstance(fact_rule, Rule):
+            for rule in self.rules[:]:
+                if rule == fact_rule and not rule.supported_by:
+                    self.rules.remove(rule)
+                    remove_supports(rule)
 
 
 class InferenceEngine(object):
@@ -142,7 +210,34 @@ class InferenceEngine(object):
         Returns:
             Nothing
         """
-        printv('Attempting to infer from {!r} and {!r} => {!r}', 1, verbose,
-            [fact.statement, rule.lhs, rule.rhs])
         ####################################################
         # Student code goes here
+        if not isinstance(rule, Rule) or not isinstance(fact, Fact):
+            return
+
+        bindings = match(rule.lhs[0], fact.statement)
+
+        if bindings:
+            new_lhs = [
+                instantiate(statement, bindings)
+                for i, statement in enumerate(rule.lhs) if i != 0
+            ]
+
+            new_rhs = instantiate(rule.rhs, bindings)
+
+            if new_lhs:
+                # If there are still conditions remaining, create a new curried Rule
+                new_rule = Rule([new_lhs, new_rhs], supported_by=[fact, rule])
+                fact.supports_rules.append(new_rule)
+                rule.supports_rules.append(new_rule)
+                kb.kb_add(new_rule)
+            else:
+                # If no LHS conditions are remaining, create a new Fact
+                item = next((i for i in kb.facts if i == Fact(new_rhs)), None)
+                if item:
+                    item.supported_by.extend([fact, rule])
+
+                new_fact = Fact(new_rhs, supported_by=[fact, rule])
+                fact.supports_facts.append(new_fact)
+                rule.supports_facts.append(new_fact)
+                kb.kb_add(new_fact)

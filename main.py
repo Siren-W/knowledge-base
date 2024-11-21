@@ -20,6 +20,7 @@ class KBTest(unittest.TestCase):
         if unittest.main.verbosity > 1:
             print(' Asking if', ask1)
         answer = self.KB.kb_ask(ask1)
+        print(answer[0])
         self.assertEqual(str(answer[0]), "?X : bing")
 
     def test2(self):
@@ -27,6 +28,7 @@ class KBTest(unittest.TestCase):
         if unittest.main.verbosity > 1:
             print(' Asking if', ask1)
         answer = self.KB.kb_ask(ask1)
+
         self.assertEqual(str(answer[0]), "?X : felix")
         self.assertEqual(str(answer[1]), "?X : chen")
 
@@ -105,6 +107,7 @@ class KBTest(unittest.TestCase):
         rule1 = read.parse_input("rule: ((hero ?x) (person ?x)) -> (goodman ?x)")
         rule2 = read.parse_input("rule: ((goodman ?x) (wenttoschool ?x)) -> (doctor ?x)")
         fact3 = read.parse_input("fact: (wenttoschool A)")
+
         ask1 = read.parse_input("fact: (goodman A)")
         ask2 = read.parse_input("fact: (doctor A)")
         
@@ -308,7 +311,6 @@ def pprint_support(fact_rule, indent):
                 print(' '*(indent+1), "support option")
                 for next in pair:
                     pprint_support(next, indent+2)
-
 
 
 if __name__ == '__main__':
